@@ -58,6 +58,8 @@
     activeTimer: 0,
     urlTimer: 0,
     activeLockUntil: 0,
+    stabilizeRunId: 0,
+    stabilizeTimers: [],
     lastUrl: location.href,
     isDragging: false,
     dragStartX: 0,
@@ -483,9 +485,20 @@
     window.addEventListener("resize", requestActiveUpdate, { passive: true });
   };
 
-  const getScrollPlan = (targetTurn) => {
+  const TARGET_OFFSET = 76;
+  const STABILIZE_THRESHOLD = 10;
+  const STABILIZE_DELAYS = [80, 220, 500, 900, 1400];
+
+  const getCurrentScrollTop = (scroller) => {
+    if (scroller === window) {
+      return window.scrollY || document.documentElement.scrollTop || 0;
+    }
+
+    return scroller.scrollTop;
+  };
+
+  const measureTargetOffset = (targetTurn) => {
     const scrollRoot = getScrollRoot();
-    const headerOffset = 76;
 
     if (
       scrollRoot &&
@@ -494,43 +507,86 @@
     ) {
       const rootRect = scrollRoot.getBoundingClientRect();
       const targetRect = targetTurn.getBoundingClientRect();
-      const top =
-        scrollRoot.scrollTop + targetRect.top - rootRect.top - headerOffset;
+      const currentTop = scrollRoot.scrollTop;
+      const offset = targetRect.top - rootRect.top - TARGET_OFFSET;
 
       return {
         scroller: scrollRoot,
-        top: Math.max(0, top),
-        currentTop: scrollRoot.scrollTop,
+        offset,
+        targetTop: Math.max(0, currentTop + offset),
+        currentTop,
       };
     }
 
-    const top =
-      window.scrollY + targetTurn.getBoundingClientRect().top - headerOffset;
+    const currentTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const offset = targetTurn.getBoundingClientRect().top - TARGET_OFFSET;
 
     return {
       scroller: window,
-      top: Math.max(0, top),
-      currentTop: window.scrollY || document.documentElement.scrollTop || 0,
+      offset,
+      targetTop: Math.max(0, currentTop + offset),
+      currentTop,
     };
+  };
+
+  const scrollTargetIntoPlace = (targetTurn, behavior = "auto") => {
+    const measurement = measureTargetOffset(targetTurn);
+    measurement.scroller.scrollTo({
+      top: measurement.targetTop,
+      behavior,
+    });
+
+    return measurement;
+  };
+
+  const clearStabilizeTimers = () => {
+    state.stabilizeTimers.forEach((timer) => window.clearTimeout(timer));
+    state.stabilizeTimers = [];
+  };
+
+  const stabilizeScroll = (item, initialBehavior) => {
+    clearStabilizeTimers();
+    const runId = ++state.stabilizeRunId;
+    const lockMs = Math.max(...STABILIZE_DELAYS) + 450;
+    state.activeLockUntil = Date.now() + lockMs;
+
+    const firstMeasurement = scrollTargetIntoPlace(item.turn, initialBehavior);
+
+    STABILIZE_DELAYS.forEach((delay, stepIndex) => {
+      const timer = window.setTimeout(() => {
+        if (runId !== state.stabilizeRunId) return;
+        if (!document.body.contains(item.turn)) return;
+
+        setActive(item.index);
+
+        const measurement = measureTargetOffset(item.turn);
+        if (Math.abs(measurement.offset) > STABILIZE_THRESHOLD) {
+          scrollTargetIntoPlace(item.turn, "auto");
+        }
+
+        if (stepIndex === STABILIZE_DELAYS.length - 1) {
+          state.activeLockUntil = 0;
+          requestActiveUpdate();
+        }
+      }, delay);
+
+      state.stabilizeTimers.push(timer);
+    });
+
+    return firstMeasurement;
   };
 
   const scrollToItem = (index) => {
     const item = state.items[index];
     if (!item?.turn) return;
 
-    state.activeLockUntil = Date.now() + 1200;
-    const plan = getScrollPlan(item.turn);
-    const distance = Math.abs(plan.top - plan.currentTop);
+    const plan = measureTargetOffset(item.turn);
+    const distance = Math.abs(plan.targetTop - getCurrentScrollTop(plan.scroller));
     const behavior = distance > 2500 ? "auto" : "smooth";
-
-    plan.scroller.scrollTo({
-      top: plan.top,
-      behavior,
-    });
 
     highlightTurn(item.turn);
     setActive(index);
-    window.setTimeout(requestActiveUpdate, behavior === "auto" ? 1250 : 1500);
+    stabilizeScroll(item, behavior);
   };
 
   const highlightTurn = (turn) => {
