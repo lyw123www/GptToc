@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT 提问目录",
+  "version": "0.1.0",
+  "description": "在 ChatGPT 右侧生成用户提问目录，支持点击快速定位和对话切换自动同步。",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

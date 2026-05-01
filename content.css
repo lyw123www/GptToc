@@ -1,0 +1,322 @@
+:root {
+  --gpt-toc-highlight: rgba(16, 163, 127, 0.22);
+}
+
+#gpt-toc-panel {
+  position: fixed;
+  top: 72px;
+  right: 12px;
+  bottom: 92px;
+  z-index: 2147483000;
+  width: 300px;
+  min-width: 220px;
+  max-width: 480px;
+  color: #202123;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  overflow: hidden;
+  user-select: none;
+  transition:
+    width 0.18s ease,
+    height 0.18s ease,
+    top 0.18s ease,
+    bottom 0.18s ease,
+    right 0.18s ease,
+    border-radius 0.18s ease;
+}
+
+#gpt-toc-panel,
+#gpt-toc-panel * {
+  box-sizing: border-box;
+}
+
+#gpt-toc-panel.gpt-toc-dragging {
+  transition: none;
+}
+
+#gpt-toc-panel.gpt-toc-collapsed {
+  top: 42%;
+  right: 0;
+  bottom: auto;
+  width: 44px !important;
+  min-width: 44px;
+  max-width: 44px;
+  height: 138px;
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+}
+
+.gpt-toc-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: #6b7280;
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.gpt-toc-toggle:hover {
+  color: #0f766e;
+  background: rgba(16, 163, 127, 0.14);
+}
+
+.gpt-toc-toggle:focus-visible {
+  outline: 2px solid rgba(16, 163, 127, 0.72);
+  outline-offset: 2px;
+}
+
+.gpt-toc-toggle-icon {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.gpt-toc-toggle-label {
+  display: none;
+}
+
+#gpt-toc-panel.gpt-toc-collapsed .gpt-toc-toggle {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 14px 0 0 14px;
+  color: #0f766e;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+#gpt-toc-panel.gpt-toc-collapsed .gpt-toc-toggle-icon {
+  font-size: 22px;
+}
+
+#gpt-toc-panel.gpt-toc-collapsed .gpt-toc-toggle-label {
+  display: block;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+#gpt-toc-panel.gpt-toc-collapsed .gpt-toc-header,
+#gpt-toc-panel.gpt-toc-collapsed .gpt-toc-list,
+#gpt-toc-panel.gpt-toc-collapsed .gpt-toc-resizer {
+  display: none;
+}
+
+.gpt-toc-resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 1;
+}
+
+.gpt-toc-resizer::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 3px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.gpt-toc-resizer:hover::after,
+#gpt-toc-panel.gpt-toc-dragging .gpt-toc-resizer::after {
+  background: rgba(16, 163, 127, 0.55);
+}
+
+.gpt-toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 50px 10px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.gpt-toc-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gpt-toc-count {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #0f766e;
+  background: rgba(13, 148, 136, 0.1);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.gpt-toc-list {
+  height: calc(100% - 47px);
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.gpt-toc-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.gpt-toc-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  background-clip: content-box;
+}
+
+.gpt-toc-empty {
+  display: none;
+  padding: 18px 12px;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.gpt-toc-list.gpt-toc-is-empty .gpt-toc-empty {
+  display: block;
+}
+
+.gpt-toc-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gpt-toc-item:hover {
+  background: rgba(0, 0, 0, 0.055);
+}
+
+.gpt-toc-item:focus-visible {
+  outline: 2px solid rgba(16, 163, 127, 0.72);
+  outline-offset: 2px;
+}
+
+.gpt-toc-item.gpt-toc-active {
+  background: rgba(16, 163, 127, 0.14);
+  color: #0f766e;
+}
+
+.gpt-toc-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border-radius: 999px;
+  color: #6b7280;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.gpt-toc-item.gpt-toc-active .gpt-toc-index {
+  color: #fff;
+  background: #10a37f;
+}
+
+.gpt-toc-text {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+#thread section.gpt-toc-target-highlight {
+  outline: 3px solid rgba(16, 163, 127, 0.55);
+  outline-offset: -3px;
+  background: var(--gpt-toc-highlight);
+  transition:
+    background 0.35s ease,
+    outline-color 0.35s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  #gpt-toc-panel {
+    color: #ececf1;
+    background: rgba(32, 33, 35, 0.94);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  }
+
+  .gpt-toc-header {
+    border-bottom-color: rgba(255, 255, 255, 0.11);
+  }
+
+  .gpt-toc-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .gpt-toc-item.gpt-toc-active {
+    background: rgba(16, 163, 127, 0.22);
+  }
+
+  .gpt-toc-index {
+    color: #d1d5db;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .gpt-toc-empty {
+    color: #9ca3af;
+  }
+}
+
+@media (max-width: 900px) {
+  #gpt-toc-panel {
+    right: 8px;
+    width: 260px;
+    max-width: calc(100vw - 24px);
+  }
+}
