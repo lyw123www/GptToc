@@ -29,7 +29,7 @@
       { id: "red", label: "\u7ea2\u8272", value: "#ef4444" },
       { id: "orange", label: "\u6a59\u8272", value: "#f97316" },
       { id: "yellow", label: "\u9ec4\u8272", value: "#eab308" },
-      { id: "green", label: "\u7eff\u8272", value: "#22c55e" },
+      { id: "cyan", label: "\u9752\u8272", value: "#06b6d4" },
       { id: "blue", label: "\u84dd\u8272", value: "#3b82f6" },
     ],
   };
@@ -137,13 +137,16 @@
   const getColorOption = (colorId) =>
     COLOR_MARKS.colors.find((color) => color.id === colorId) || null;
 
+  const normalizeColorId = (colorId) => (colorId === "green" ? "cyan" : colorId);
+
   const normalizeColorMarks = (marks) => {
     if (!marks || typeof marks !== "object" || Array.isArray(marks)) return {};
 
     const normalized = {};
     Object.entries(marks).forEach(([key, colorId]) => {
-      if (typeof key === "string" && getColorOption(colorId)) {
-        normalized[key] = colorId;
+      const normalizedColorId = normalizeColorId(colorId);
+      if (typeof key === "string" && getColorOption(normalizedColorId)) {
+        normalized[key] = normalizedColorId;
       }
     });
     return normalized;
