@@ -101,6 +101,7 @@
     stabilizeRunId: 0,
     stabilizeTimers: [],
     lastUrl: location.href,
+    conversationKey: null,
     isDragging: false,
     dragStartX: 0,
     dragStartWidth: WIDTH.default,
@@ -522,7 +523,7 @@
     if (!state.list) return;
 
     state.list.querySelectorAll(".gpt-toc-row").forEach((row) => {
-      const markKey = row.dataset.markKey || getColorMarkKey(row.dataset.key);
+      const markKey = getColorMarkKey(row.dataset.key);
       row.dataset.markKey = markKey;
       const colorId = state.colorMarks[markKey];
       applyColorMarkToElement(row, colorId);
@@ -751,7 +752,10 @@
 
   const refreshListIfStale = () => {
     const nextItems = collectItems();
-    if (isSameItemList(nextItems)) return false;
+    const conversationKey = getConversationStorageKey();
+    if (state.conversationKey === conversationKey && isSameItemList(nextItems)) {
+      return false;
+    }
 
     renderList();
     return true;
@@ -760,13 +764,16 @@
   const renderList = () => {
     if (!state.list || !state.count) return;
 
+    const conversationKey = getConversationStorageKey();
+    const conversationChanged = state.conversationKey !== conversationKey;
     const previousListScrollTop = state.list.scrollTop;
     const previousExpandedKey = state.expandedKey;
     const previousActiveKey =
       state.activeIndex >= 0 ? state.items[state.activeIndex]?.key : null;
     const nextItems = collectItems();
-    const sameList = isSameItemList(nextItems);
+    const sameList = !conversationChanged && isSameItemList(nextItems);
 
+    state.conversationKey = conversationKey;
     state.items = nextItems;
     state.count.textContent = String(state.items.length);
     updateCollapsedLabel();
@@ -1961,6 +1968,7 @@
     state.thread = null;
     state.threadObserver?.disconnect();
     state.threadObserver = null;
+    state.conversationKey = null;
     state.activeIndex = -1;
     state.expandedKey = null;
     state.manualCollapsedKey = null;
