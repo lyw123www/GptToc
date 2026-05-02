@@ -8,6 +8,7 @@
     panel: "gpt-toc-panel",
     exportButton: "gpt-toc-export-button",
     toast: "gpt-toc-toast",
+    colorMenu: "gpt-toc-color-menu",
   };
 
   const WIDTH = {
@@ -20,6 +21,17 @@
   const COLLAPSE = {
     key: "gptTocCollapsed",
     default: false,
+  };
+
+  const COLOR_MARKS = {
+    key: "gptTocColorMarks",
+    colors: [
+      { id: "red", label: "\u7ea2\u8272", value: "#ef4444" },
+      { id: "orange", label: "\u6a59\u8272", value: "#f97316" },
+      { id: "yellow", label: "\u9ec4\u8272", value: "#eab308" },
+      { id: "green", label: "\u7eff\u8272", value: "#22c55e" },
+      { id: "blue", label: "\u84dd\u8272", value: "#3b82f6" },
+    ],
   };
 
   const SELECTORS = {
@@ -54,6 +66,8 @@
     noHeadings: "\u672c\u8f6e\u56de\u590d\u6682\u65e0\u5b50\u6807\u9898",
     expandChildren: "\u5c55\u5f00\u5b50\u6807\u9898",
     collapseChildren: "\u6536\u8d77\u5b50\u6807\u9898",
+    colorMark: "\u989c\u8272\u6807\u8bb0",
+    clearColor: "\u6e05\u9664\u989c\u8272",
   };
 
   const ACTION_NOISE_PATTERN =
@@ -92,6 +106,10 @@
     dragStartWidth: WIDTH.default,
     collapsed: COLLAPSE.default,
     scrollListenerRoot: null,
+    colorMarks: {},
+    colorMenu: null,
+    colorMenuTarget: null,
+    colorMenuEventsBound: false,
   };
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -116,15 +134,34 @@
 
   const getStorage = () => globalThis.chrome?.storage?.local || null;
 
+  const getColorOption = (colorId) =>
+    COLOR_MARKS.colors.find((color) => color.id === colorId) || null;
+
+  const normalizeColorMarks = (marks) => {
+    if (!marks || typeof marks !== "object" || Array.isArray(marks)) return {};
+
+    const normalized = {};
+    Object.entries(marks).forEach(([key, colorId]) => {
+      if (typeof key === "string" && getColorOption(colorId)) {
+        normalized[key] = colorId;
+      }
+    });
+    return normalized;
+  };
+
   const readSettings = () =>
     new Promise((resolve) => {
       const fallback = () => {
         let width = WIDTH.default;
         let collapsed = COLLAPSE.default;
+        let colorMarks = {};
 
         try {
           width = Number(localStorage.getItem(WIDTH.key)) || WIDTH.default;
           collapsed = localStorage.getItem(COLLAPSE.key) === "true";
+          colorMarks = normalizeColorMarks(
+            JSON.parse(localStorage.getItem(COLOR_MARKS.key) || "{}"),
+          );
         } catch {
           // ignore localStorage errors
         }
@@ -132,6 +169,7 @@
         resolve({
           width: clamp(width, WIDTH.min, WIDTH.max),
           collapsed,
+          colorMarks,
         });
       };
 
@@ -146,6 +184,7 @@
           {
             [WIDTH.key]: WIDTH.default,
             [COLLAPSE.key]: COLLAPSE.default,
+            [COLOR_MARKS.key]: {},
           },
           (result) => {
             if (globalThis.chrome?.runtime?.lastError) {
@@ -160,6 +199,7 @@
                 WIDTH.max,
               ),
               collapsed: Boolean(result?.[COLLAPSE.key]),
+              colorMarks: normalizeColorMarks(result?.[COLOR_MARKS.key]),
             });
           },
         );
@@ -196,6 +236,27 @@
       if (Object.prototype.hasOwnProperty.call(data, COLLAPSE.key)) {
         localStorage.setItem(COLLAPSE.key, String(data[COLLAPSE.key]));
       }
+    } catch {
+      // ignore persistence errors
+    }
+  };
+
+  const saveColorMarks = () => {
+    const colorMarks = normalizeColorMarks(state.colorMarks);
+    state.colorMarks = colorMarks;
+
+    try {
+      const storage = getStorage();
+      if (storage) {
+        storage.set({ [COLOR_MARKS.key]: colorMarks });
+        return;
+      }
+    } catch {
+      // fall back to localStorage
+    }
+
+    try {
+      localStorage.setItem(COLOR_MARKS.key, JSON.stringify(colorMarks));
     } catch {
       // ignore persistence errors
     }
@@ -260,6 +321,7 @@
 
     const settings = await readSettings();
     state.collapsed = settings.collapsed;
+    state.colorMarks = normalizeColorMarks(settings.colorMarks);
     applyWidth(settings.width);
     applyCollapsed();
 
@@ -268,6 +330,7 @@
       ?.addEventListener("pointerdown", onResizePointerDown);
     state.toggle?.addEventListener("click", toggleCollapsed);
     state.exportButton?.addEventListener("click", handleExportClick);
+    bindColorMenuGlobalEvents();
   };
 
   const applyCollapsed = () => {
@@ -299,6 +362,168 @@
     state.collapsed = !state.collapsed;
     applyCollapsed();
     saveSettings({ collapsed: state.collapsed });
+  };
+
+  const hideColorMenu = () => {
+    if (state.colorMenu) {
+      state.colorMenu.classList.remove("gpt-toc-color-menu-show");
+      state.colorMenu.setAttribute("aria-hidden", "true");
+    }
+    state.colorMenuTarget = null;
+  };
+
+  const ensureColorMenu = () => {
+    if (state.colorMenu && document.body.contains(state.colorMenu)) {
+      return state.colorMenu;
+    }
+
+    const menu = document.createElement("div");
+    menu.id = IDS.colorMenu;
+    menu.className = "gpt-toc-color-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-hidden", "true");
+
+    const title = document.createElement("div");
+    title.className = "gpt-toc-color-menu-title";
+    title.textContent = TEXT.colorMark;
+    menu.appendChild(title);
+
+    COLOR_MARKS.colors.forEach((color) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "gpt-toc-color-option";
+      button.dataset.colorId = color.id;
+      button.setAttribute("role", "menuitem");
+
+      const swatch = document.createElement("span");
+      swatch.className = "gpt-toc-color-swatch";
+      swatch.style.background = color.value;
+      swatch.setAttribute("aria-hidden", "true");
+
+      const label = document.createElement("span");
+      label.textContent = color.label;
+
+      button.append(swatch, label);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        applyColorMarkToMenuTarget(color.id);
+      });
+      menu.appendChild(button);
+    });
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "gpt-toc-color-option gpt-toc-color-clear";
+    clearButton.dataset.clear = "true";
+    clearButton.setAttribute("role", "menuitem");
+    clearButton.textContent = TEXT.clearColor;
+    clearButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyColorMarkToMenuTarget(null);
+    });
+    menu.appendChild(clearButton);
+
+    document.body.appendChild(menu);
+    state.colorMenu = menu;
+    return menu;
+  };
+
+  const positionColorMenu = (menu, clientX, clientY) => {
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    menu.classList.add("gpt-toc-color-menu-show");
+    menu.setAttribute("aria-hidden", "false");
+
+    const rect = menu.getBoundingClientRect();
+    const padding = 8;
+    const left = clamp(clientX, padding, window.innerWidth - rect.width - padding);
+    const top = clamp(clientY, padding, window.innerHeight - rect.height - padding);
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  };
+
+  const showColorMenu = (event, item) => {
+    if (!item?.key) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    state.colorMenuTarget = getColorMarkKey(item.key);
+    const menu = ensureColorMenu();
+    const markKey = getColorMarkKey(item.key);
+    menu
+      .querySelectorAll(".gpt-toc-color-option")
+      .forEach((button) => {
+        button.classList.toggle(
+          "gpt-toc-color-selected",
+          Boolean(button.dataset.colorId) &&
+            state.colorMarks[markKey] === button.dataset.colorId,
+        );
+      });
+    positionColorMenu(menu, event.clientX, event.clientY);
+  };
+
+  const bindColorMenuGlobalEvents = () => {
+    if (state.colorMenuEventsBound) return;
+    state.colorMenuEventsBound = true;
+
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (state.colorMenu?.contains(event.target)) return;
+        hideColorMenu();
+      },
+      true,
+    );
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") hideColorMenu();
+    });
+
+    window.addEventListener("scroll", hideColorMenu, true);
+    window.addEventListener("resize", hideColorMenu, { passive: true });
+  };
+
+  const applyColorMarkToMenuTarget = (colorId) => {
+    const key = state.colorMenuTarget;
+    if (!key) return;
+
+    if (colorId && getColorOption(colorId)) {
+      state.colorMarks[key] = colorId;
+    } else {
+      delete state.colorMarks[key];
+    }
+
+    saveColorMarks();
+    applyColorMarksToDom();
+    hideColorMenu();
+  };
+
+  const applyColorMarkToElement = (element, colorId) => {
+    const color = getColorOption(colorId);
+    element.classList.toggle("gpt-toc-color-marked", Boolean(color));
+
+    if (color) {
+      element.dataset.colorMark = color.id;
+      element.style.setProperty("--gpt-toc-mark-color", color.value);
+    } else {
+      delete element.dataset.colorMark;
+      element.style.removeProperty("--gpt-toc-mark-color");
+    }
+  };
+
+  const applyColorMarksToDom = () => {
+    if (!state.list) return;
+
+    state.list.querySelectorAll(".gpt-toc-row").forEach((row) => {
+      const markKey = row.dataset.markKey || getColorMarkKey(row.dataset.key);
+      row.dataset.markKey = markKey;
+      const colorId = state.colorMarks[markKey];
+      applyColorMarkToElement(row, colorId);
+    });
   };
 
   const onResizePointerDown = (event) => {
@@ -350,6 +575,26 @@
       message?.getAttribute("data-message-id") ||
       `user-turn-${index + 1}`
     );
+  };
+
+  const getConversationStorageKey = () => {
+    const match = location.pathname.match(/\/(?:c|share)\/([^/?#]+)/u);
+    if (match?.[1]) return `conversation:${match[1]}`;
+
+    return `page:${location.origin}${location.pathname}`;
+  };
+
+  const getColorMarkKey = (turnKey) =>
+    `${getConversationStorageKey()}::${turnKey}`;
+
+  const migrateLegacyColorMark = (turnKey) => {
+    const markKey = getColorMarkKey(turnKey);
+    if (!state.colorMarks[markKey] && state.colorMarks[turnKey]) {
+      state.colorMarks[markKey] = state.colorMarks[turnKey];
+      delete state.colorMarks[turnKey];
+      saveColorMarks();
+    }
+    return markKey;
   };
 
   const getTurnRole = (turn) => {
@@ -487,6 +732,28 @@
     });
   };
 
+  const isSameItemList = (nextItems, currentItems = state.items) =>
+    nextItems.length === currentItems.length &&
+    nextItems.every(
+      (item, index) =>
+        item.key === currentItems[index]?.key &&
+        item.text === currentItems[index]?.text &&
+        item.children.length === currentItems[index]?.children?.length &&
+        item.children.every(
+          (child, childIndex) =>
+            child.text === currentItems[index]?.children?.[childIndex]?.text &&
+            child.level === currentItems[index]?.children?.[childIndex]?.level,
+        ),
+    );
+
+  const refreshListIfStale = () => {
+    const nextItems = collectItems();
+    if (isSameItemList(nextItems)) return false;
+
+    renderList();
+    return true;
+  };
+
   const renderList = () => {
     if (!state.list || !state.count) return;
 
@@ -495,19 +762,7 @@
     const previousActiveKey =
       state.activeIndex >= 0 ? state.items[state.activeIndex]?.key : null;
     const nextItems = collectItems();
-    const sameList =
-      nextItems.length === state.items.length &&
-      nextItems.every(
-        (item, index) =>
-          item.key === state.items[index]?.key &&
-          item.text === state.items[index]?.text &&
-          item.children.length === state.items[index]?.children?.length &&
-          item.children.every(
-            (child, childIndex) =>
-              child.text === state.items[index]?.children?.[childIndex]?.text &&
-              child.level === state.items[index]?.children?.[childIndex]?.level,
-          ),
-      );
+    const sameList = isSameItemList(nextItems);
 
     state.items = nextItems;
     state.count.textContent = String(state.items.length);
@@ -529,6 +784,9 @@
         row.className = "gpt-toc-row";
         row.dataset.index = String(item.index);
         row.dataset.key = item.key;
+        row.dataset.markKey = migrateLegacyColorMark(item.key);
+        applyColorMarkToElement(row, state.colorMarks[row.dataset.markKey]);
+        row.addEventListener("contextmenu", (event) => showColorMenu(event, item));
 
         const button = document.createElement("button");
         button.type = "button";
@@ -597,6 +855,8 @@
       requestAnimationFrame(() => {
         if (state.list) state.list.scrollTop = previousListScrollTop;
       });
+    } else {
+      applyColorMarksToDom();
     }
 
     state.activeIndex = previousActiveKey
@@ -900,6 +1160,11 @@
   };
 
   const scrollToItem = (index) => {
+    if (refreshListIfStale()) {
+      requestAnimationFrame(() => scrollToItem(index));
+      return;
+    }
+
     const item = state.items[index];
     if (!item?.turn) return;
 
@@ -914,6 +1179,11 @@
   };
 
   const scrollToChildHeading = (parentIndex, childIndex) => {
+    if (refreshListIfStale()) {
+      requestAnimationFrame(() => scrollToChildHeading(parentIndex, childIndex));
+      return;
+    }
+
     const item = getItemByIndex(parentIndex);
     const child = item?.children?.[childIndex];
     if (!item || !child?.target || !document.body.contains(child.target)) return;
@@ -1626,6 +1896,15 @@
           }
         }
       }
+
+      if (mutation.type === "characterData") {
+        if (
+          mutation.target.parentElement?.closest?.(SELECTORS.userTurn) ||
+          mutation.target.parentElement?.closest?.(SELECTORS.assistantTurn)
+        ) {
+          return true;
+        }
+      }
     }
 
     return false;
@@ -1649,6 +1928,7 @@
     state.threadObserver.observe(thread, {
       childList: true,
       subtree: true,
+      characterData: true,
       attributes: true,
       attributeFilter: ["data-turn", "data-message-author-role", "data-message-id"],
     });
@@ -1681,6 +1961,7 @@
     state.activeIndex = -1;
     state.expandedKey = null;
     state.manualCollapsedKey = null;
+    hideColorMenu();
     scheduleRebuild(300);
   };
 
