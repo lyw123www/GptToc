@@ -135,6 +135,22 @@
 
   const getStorage = () => globalThis.chrome?.storage?.local || null;
 
+  const readLocalJson = (key, fallbackValue = {}) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallbackValue));
+    } catch {
+      return fallbackValue;
+    }
+  };
+
+  const writeLocalJson = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // ignore persistence errors
+    }
+  };
+
   const getColorOption = (colorId) =>
     COLOR_MARKS.colors.find((color) => color.id === colorId) || null;
 
@@ -158,14 +174,11 @@
       const fallback = () => {
         let width = WIDTH.default;
         let collapsed = COLLAPSE.default;
-        let colorMarks = {};
+        let colorMarks = normalizeColorMarks(readLocalJson(COLOR_MARKS.key, {}));
 
         try {
           width = Number(localStorage.getItem(WIDTH.key)) || WIDTH.default;
           collapsed = localStorage.getItem(COLLAPSE.key) === "true";
-          colorMarks = normalizeColorMarks(
-            JSON.parse(localStorage.getItem(COLOR_MARKS.key) || "{}"),
-          );
         } catch {
           // ignore localStorage errors
         }
@@ -196,6 +209,22 @@
               return;
             }
 
+            const storageMarks = normalizeColorMarks(result?.[COLOR_MARKS.key]);
+            const localMarks = normalizeColorMarks(readLocalJson(COLOR_MARKS.key, {}));
+            const colorMarks = {
+              ...localMarks,
+              ...storageMarks,
+            };
+
+            if (Object.keys(localMarks).length || Object.keys(storageMarks).length) {
+              try {
+                storage.set({ [COLOR_MARKS.key]: colorMarks });
+              } catch {
+                // ignore sync-back errors
+              }
+              writeLocalJson(COLOR_MARKS.key, colorMarks);
+            }
+
             resolve({
               width: clamp(
                 Number(result?.[WIDTH.key]) || WIDTH.default,
@@ -203,7 +232,7 @@
                 WIDTH.max,
               ),
               collapsed: Boolean(result?.[COLLAPSE.key]),
-              colorMarks: normalizeColorMarks(result?.[COLOR_MARKS.key]),
+              colorMarks,
             });
           },
         );
@@ -253,17 +282,12 @@
       const storage = getStorage();
       if (storage) {
         storage.set({ [COLOR_MARKS.key]: colorMarks });
-        return;
       }
     } catch {
       // fall back to localStorage
     }
 
-    try {
-      localStorage.setItem(COLOR_MARKS.key, JSON.stringify(colorMarks));
-    } catch {
-      // ignore persistence errors
-    }
+    writeLocalJson(COLOR_MARKS.key, colorMarks);
   };
 
   const applyWidth = (width) => {
